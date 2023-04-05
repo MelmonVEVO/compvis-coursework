@@ -21,21 +21,19 @@ for im_filename in os.listdir(images_directory):
         searchable_images.append(cv.cvtColor(readImage, cv.COLOR_BGR2GRAY))
         colour_images.append(readImage)
 
-imidx = 0
-for image in searchable_images:
-    for template in template_images:  # Edit the following
-        w, h = template.shape[::-1]
-        res = cv.matchTemplate(image, template, cv.TM_CCOEFF_NORMED)
+for imidx, image in enumerate(searchable_images):
+    for template in template_images:
+        # Densely matches all template images with main image using the normalised correlation coefficient
+        h, w = template.shape
+        result = cv.matchTemplate(image, template, cv.TM_CCOEFF_NORMED)
 
-        threshold = 0.9
-        loc = np.where(res >= threshold)
+        threshold = 0.9  # Defines a threshold above which 
+        loc = np.where(result >= threshold)
 
-        for pt in zip(*loc[::-1]):
-            cv.rectangle(colour_images[imidx], pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 1)
+        for x_pt, y_pt in zip(*loc[::-1]):
+            cv.rectangle(colour_images[imidx], (x_pt, y_pt), (x_pt + w, y_pt + h), (0, 0, 255), 1)
 
     cv.imshow('Display image', colour_images[imidx])
     cv.waitKey(0)
-
-    imidx += 1
 
 cv.destroyAllWindows()
