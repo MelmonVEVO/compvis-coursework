@@ -7,6 +7,33 @@ from csv import writer, QUOTE_MINIMAL
 templates_directory = "template_images"  # Edit these as needed
 images_directory = "images/images"
 
+def build_pyramids(img, pyr_height: int = 3) -> tuple[list, list]:
+    temp_image = img.copy()
+    temp_gauss = [temp_image]
+    for i in range(pyr_height):
+        temp_image = cv.pyrDown(temp_image)
+        temp_gauss.append(temp_image)
+
+    temp_laplacian = [temp_gauss[-1]]
+    for i in range(pyr_height - 1, 0, -1):
+        temp_shape = (temp_gauss[i - 1].shape[1], temp_gauss[i - 1].shape[0])
+        temp_upscale = cv.pyrUp(temp_gauss[i], dstsize=temp_shape)
+        diff = cv.subtract(temp_gauss[i - 1], temp_upscale)
+        temp_laplacian.append(diff)
+
+    current = temp_laplacian[0]
+    for i in range(1, len(temp_laplacian), 1):
+        temp_shape = (temp_laplacian[i + 1].shape[1], temp_laplacian[i + 1].shape[0])
+        cv.imshow("Window", current)
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+        current = cv.add(cv.pyrUp(current, dstsize=temp_shape), temp_laplacian)
+        cv.imshow("Window", current)
+        cv.waitKey(0)
+        cv.destroyAllWindows()
+
+    return temp_gauss, temp_laplacian
+
 template_images = []
 for filename in os.listdir(templates_directory):  # scale by 1/8
     template_filepath = os.path.join(templates_directory, filename)
