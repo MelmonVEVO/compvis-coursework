@@ -1,6 +1,8 @@
 import os
 import cv2 as cv
 import numpy as np
+from timeit import default_timer
+from csv import writer, QUOTE_MINIMAL
 
 templates_directory = "template_images"  # Edit these as needed
 images_directory = "images/images"
@@ -21,7 +23,9 @@ for im_filename in os.listdir(images_directory):
         searchable_images.append(cv.cvtColor(readImage, cv.COLOR_BGR2GRAY))
         colour_images.append(readImage)
 
+timings = []
 for imidx, image in enumerate(searchable_images):
+    tm = default_timer()
     for template in template_images:
         # Densely matches all template images with main image using the normalised correlation coefficient
         h, w = template.shape
@@ -32,8 +36,14 @@ for imidx, image in enumerate(searchable_images):
 
         for x_pt, y_pt in zip(*loc[::-1]):
             cv.rectangle(colour_images[imidx], (x_pt, y_pt), (x_pt + w, y_pt + h), (0, 0, 255), 1)
+    tm2 = default_timer()
+    timings.append(tm2 - tm)
 
     cv.imshow('Display image', colour_images[imidx])
     cv.waitKey(0)
+
+with open('times.csv', 'w') as csvfile:
+    wt = writer(csvfile, quotechar='|', quoting=QUOTE_MINIMAL)
+    wt.writerow(timings)
 
 cv.destroyAllWindows()
