@@ -34,8 +34,11 @@ threshold = 250  # maximum distance threshold, change as appropriate
 for image in searchable_images:
     for template in template_images:
         h, w = template.shape[:2]
-        # use brute force matcher
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+        # Make brute force matcher for matching template features onto the main features
+        bf = cv2.BFMatcher(
+            cv2.NORM_L2, 
+            crossCheck=True
+        )
         # make a SIFT algorithm
         sift = cv2.SIFT_create(
             nOctaveLayers=6,
