@@ -16,7 +16,7 @@ for filename in os.listdir(templates_directory):
     template_filepath = os.path.join(templates_directory, filename)
     if os.path.isfile(template_filepath):
         im = cv2.imread(template_filepath)
-        template_images.append(cv2.resize(im, (0, 0), fx=1/8, fy=1/8))
+        template_images.append(cv2.resize(im, (0, 0), fx=1 / 8, fy=1 / 8))
 
 searchable_images = []
 
@@ -28,57 +28,91 @@ for im_filename in os.listdir(images_directory):
 
 # Compare each template against each test image
 timings = []
+min_matches = 9  # Minimum number of good feature matches to consider a true match
+threshold = 250  # maximum distance threshold, change as appropriate
+
 for image in searchable_images:
-    st = default_timer()
     for template in template_images:
-
-        img1 = template
-        img2 = image
-
-        sift = cv2.SIFT_create()
-
-        # create key points and descriptions
-        kp1, des1 = sift.detectAndCompute(img1, None)
-        kp2, des2 = sift.detectAndCompute(img2, None)
-
+        h, w = template.shape[:2]
         # use brute force matcher
         bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+        # make a SIFT algorithm
+        sift = cv2.SIFT_create(
+            nOctaveLayers=6,
+            edgeThreshold=15,
+            contrastThreshold=0.08
+        )  # contrastThreshold becomes less effective as nOctaveLayers increases
+        # This means you must increase contrastThreshold proportionally to any increase in nOctaveLayers
 
-        matches = bf.match(des1, des2) # get matches
-        matches = sorted(matches, key = lambda x:x.distance) # sort matches based on distance
-        threshold = 250 # maximum distance threshold, change as appropriate
-        good = []
-        for i in range(len(matches)):
-            if matches[i].distance < threshold: # filter out all bad matches
-                good.append(matches[i])
+        # create key points and descriptors for the main image and the template image
+        # These are used to match the template on top of the image with scale invariant property
+        key_points_template, descriptors_template = sift.detectAndCompute(template, None)
+        key_points_main, descriptors_main = sift.detectAndCompute(image, None)
 
-        if len(good) > 9: # only run with enough good matches
-            good = good[:10] # take 10 best matches
-            src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0) # builder matches mask
-            matchesMask = mask.ravel().tolist()
-            h, w = img1.shape[:2]
-            pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+        # get matches sorted based on distance
+        # (this is distance in brute force match space, so low distance is good match)
+        matches = sorted(bf.match(descriptors_template, descriptors_main), key=lambda x: x.distance)
 
-            dst = cv2.perspectiveTransform(pts, M)
-            dst += (w, 0)  # adding offset
+        good_matches = [found_match for found_match in matches if found_match.distance < threshold][:10]
 
-            draw_params = dict(matchColor=(0, 255, 0),  # draw matches in green color
-                               singlePointColor=None,
-                               matchesMask=matchesMask,  # draw only inliers
-                               flags=2)
+        if len(good_matches) > min_matches:  # only run with enough good matches
+            points = np.array(
+                [[[0, 0]], [[0, h - 1]], [[w - 1, h - 1]], [[w - 1, 0]]],  # Appropriately formatted like (-1, 1, 2)
+                dtype=np.float32
+            )  # Defines the key points of the image, top left, bot left, bot right, top right
 
-            img3 = cv2.drawMatches(img1, kp1, img2, kp2, good, None, **draw_params)
+            src_points = np.array(
+                [key_points_template[match.queryIdx].pt for match in good_matches],
+                dtype=np.float32
+            ).reshape(-1, 1, 2)  # Finds the source points to draw from
 
-            # Draw bounding box in Red
-            img3 = cv2.polylines(img3, [np.int32(dst)], True, (0, 0, 255), 3, cv2.LINE_AA)
+            dest_points = np.array(
+                [key_points_main[match.trainIdx].pt for match in good_matches],
+                dtype=np.float32
+            ).reshape(-1, 1, 2)  # Finds the destination points to draw to
 
-            # cv2.imshow("result", img3)
-            # cv2.waitKey()
+            homography, mask = cv2.findHomography(
+                src_points,
+                dest_points,
+                cv2.RANSAC,
+                5.0
+            )  # Uses RANSAC to map the source points to the destination points and find a homography
+            matchesMask = list(mask.ravel())
 
-    et = default_timer()
-    timings.append(et - st)
+            # Adds width offset to each point by adding coord vector in form (width, height)
+            dest = cv2.perspectiveTransform(points, homography) + (w, 0)
+
+            # Defines the way in which to draw the matches and starting points
+            draw_params = {
+                "matchColor": (0, 255, 0),  # Match colour
+                "singlePointColor": None,
+                "matchesMask": matchesMask,  # The matches that should be drawn
+                "flags": 2
+            }
+
+            # Updates final image
+            final_img = cv2.drawMatches(
+                template,  # Template image drawn
+                key_points_template,  # Key points on the template image
+                image,  # Main image drawn
+                key_points_main,  # Key points on the main image to be matched to
+                good_matches,  # The subset of point pairs that are good matches
+                None,
+                **draw_params  # The unpacked dictionary values of drawing parameters to use for viewing
+            )  # Draws found matches to final rendered image
+
+            # Updates final image
+            final_img = cv2.polylines(
+                final_img,
+                [np.array(dest, dtype=np.int32)],
+                True,
+                (0, 0, 255),  # Defines the line colours for the matches
+                3,  # Line thickness
+                cv2.LINE_AA  # Line draw type
+            )  # Draws calculated bounding box to final image in red
+
+            cv2.imshow("result", final_img)
+            cv2.waitKey()
 
 with open('Task3_times.csv', 'w') as csvfile:
     wt = writer(csvfile, quotechar='|', quoting=QUOTE_MINIMAL)
