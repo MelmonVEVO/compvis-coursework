@@ -1,0 +1,1 @@
+task1_acc_[min_hysteresis]_[max_hysteresis]_[canny_filter_size]_[hough_detection_threshold]

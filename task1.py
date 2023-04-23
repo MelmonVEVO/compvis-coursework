@@ -1,7 +1,8 @@
 import matplotlib, cv2
 import numpy as np
 import matplotlib.pyplot as plt
-
+import os
+import csv
 
 def hough_lines_acc(img, rho_resolution: int = 1, theta_resolution: int = 1):
     """  Accumulates all the sinusoids for image such that hough lines can be formed
@@ -42,56 +43,88 @@ def get_hough_peaks(H, num_peaks: int):
     return np.vstack(np.unravel_index(indices, H.shape)).T  # REDO THIS IT IS TOO OBSCURE
 
 
-img = cv2.imread('angle/image1.png')
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+images_directory = "angle"
+
+annotations = []
+with open("angle/list.txt") as st:
+    for line in st:
+        annotations.append(int(line.split(",")[1]))
+print(annotations)
+
+correct = 0
+incorrect = 0
+results = []
+
 min_hysteresis = 100
 max_hysteresis = 200
-edges = cv2.Canny(gray, min_hysteresis, max_hysteresis)
-x1,x2 = edges.shape
-count = 0
+filter_size = 3
+hough_detection_threshold = 40
 
-hough_detection_threshold = 70
-lines = cv2.HoughLines(edges, 1, np.pi / 180, hough_detection_threshold)
-H, rhos, thetas = hough_lines_acc(edges)
-indicies = get_hough_peaks(H, 3)
-angles = []
-min = 361 # Not 360 as a 360 degree angle is equivalent to a 0 degree angle
-max = 0
+for im_filename, annotation in zip(sorted(os.listdir(images_directory)), annotations):
+    if im_filename[-3:] != "png":
+        continue
+    img = cv2.imread('angle/' + im_filename)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-for ind in indicies:
-    # Create lines given our lists of rhos and thetas
-    rho = rhos[ind[0]]
-    theta = thetas[ind[1]]
-    
-    # Calculates degrees out of rads
-    degree = theta * (180/np.pi)
-    if rho < 0:
-        degree += 180
-    if len(angles) == 0:
-        angles.append(degree)
-    if len(angles) == 1:
-        if abs(int(degree) - int(angles[0])) > 2:
+    edges = cv2.Canny(gray, min_hysteresis, max_hysteresis, None, filter_size)
+    x1,x2 = edges.shape
+    count = 0
+
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, hough_detection_threshold)
+    H, rhos, thetas = hough_lines_acc(edges)
+    indicies = get_hough_peaks(H, 3)
+    angles = []
+    min = 361 # Not 360 as a 360 degree angle is equivalent to a 0 degree angle
+    max = 0
+
+
+    for ind in indicies:
+        # Create lines given our lists of rhos and thetas
+        rho = rhos[ind[0]]
+        theta = thetas[ind[1]]
+
+        # Calculates degrees out of rads
+        degree = theta * (180/np.pi)
+        if rho < 0:
+            degree += 180
+        if len(angles) == 0:
             angles.append(degree)
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    
-    # these are then scaled so that the lines go off the edges of the image
-    x1 = int(x0 + 1000*(-b))
-    y1 = int(y0 + 1000*(a))
-    x2 = int(x0 - 1000*(-b))
-    y2 = int(y0 - 1000*(a))
+        if len(angles) == 1:
+            if abs(int(degree) - int(angles[0])) > 2:
+                angles.append(degree)
+        a = np.cos(theta)
+        b = np.sin(theta)
+        x0 = a*rho
+        y0 = b*rho
 
-    cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Draws line onto the image, no need for capturing return
+        # these are then scaled so that the lines go off the edges of the image
+        x1 = int(x0 + 1000*(-b))
+        y1 = int(y0 + 1000*(a))
+        x2 = int(x0 - 1000*(-b))
+        y2 = int(y0 - 1000*(a))
 
-# Computes correct angle between lines found
-for i in range(len(angles)):
-    min = angles[i] if angles[i] < min else min
-    max = angles[i] if angles[i] > max else max
+        cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Draws line onto the image, no need for capturing return
 
-angle_final = round(360-(max-min) if (max-min) > 180 else max-min)
-# More accurate than just casting to int
-print(angle_final)  # Our final output
+    # Computes correct angle between lines found
+    for i in range(len(angles)):
+        min = angles[i] if angles[i] < min else min
+        max = angles[i] if angles[i] > max else max
 
-cv2.imshow('img', img)
+    angle_final = round(360-(max-min) if (max-min) > 180 else max-min)
+    # More accurate than just casting to int
+    print(im_filename, angle_final)  # Our final output
+    results.append(angle_final)
+    if angle_final == annotation:
+        correct += 1
+    else:
+        incorrect += 1
+
+    cv2.imshow('img', img)
+
+with open('task1results/task1_acc_' + str(min_hysteresis) + "_" + str(max_hysteresis) + "_" + str(filter_size) + "_" + str(hough_detection_threshold) + ".csv", 'w') as resultsfile:
+    writer = csv.writer(resultsfile)
+    writer.writerow(annotations)
+    writer.writerow(results)
+
+with open('task1results/task1_acc_' + str(min_hysteresis) + "_" + str(max_hysteresis) + "_" + str(filter_size) + "_" + str(hough_detection_threshold) + ".txt", 'w') as resultsfile:
+    resultsfile.write("Correct: " + str(correct) + "\nIncorrect: " + str(incorrect) + "\nAccuracy: " + str(correct / (correct+incorrect)))
