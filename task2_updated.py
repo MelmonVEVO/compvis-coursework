@@ -1,11 +1,19 @@
 import os
 import cv2 as cv
 import numpy as np
+import time
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 templates_directory = "Task2Dataset/Training/png"  # Edit these as needed
 images_directory = "Task2Dataset/TestWithoutRotations/images"
+image_label_directory = "Task2Dataset/TestWithoutRotations/annotations"
 
 p_size = 2
+
+times = []
 
 
 def get_jaccard(coords: np.ndarray, thresh: float) -> list:
@@ -50,10 +58,8 @@ def get_jaccard(coords: np.ndarray, thresh: float) -> list:
         box_orders = area_arr[ordered_coeffs]
 
         # extracts the coordinates in order, this could be done on the whole original array but wastes the sort on score
-        x1_ord = x1[ordered_coeffs]
-        y1_ord = y1[ordered_coeffs]
-        x2_ord = x2[ordered_coeffs]
-        y2_ord = y2[ordered_coeffs]
+        x1_ord, y1_ord = x1[ordered_coeffs], y1[ordered_coeffs]
+        x2_ord, y2_ord = x2[ordered_coeffs], y2[ordered_coeffs]
 
         # Finds the intersection points
         x1_high, y1_high = np.maximum(x1_ord, x1[highest_ind]), np.maximum(y1_ord, y1[highest_ind])
@@ -63,7 +69,7 @@ def get_jaccard(coords: np.ndarray, thresh: float) -> list:
         widths = np.maximum(x2_high - x1_high, 0)
         heights = np.maximum(y2_high - y1_high, 0)
 
-        # Finds intersection areas
+        # Finds intersection areas for each box
         inter_area = widths * heights
 
         # Finds union of areas of boxes. Will be lower for objects with an intersection.
@@ -108,12 +114,14 @@ def build_pyramids(img: np.ndarray, pyr_height: int = 3) -> tuple[list, list]:
 
 template_images = []
 lap_templates = []
+template_names = []
 for filename in os.listdir(templates_directory):  # scale by 1/8
     template_filepath = os.path.join(templates_directory, filename)
     if os.path.isfile(template_filepath):
         im = cv.imread(template_filepath)
         template_images.append(cv.cvtColor(cv.resize(im, (0, 0), fx=1 / 8, fy=1 / 8), cv.COLOR_BGR2GRAY))
         lap_templates.append(build_pyramids(cv.resize(im, (0, 0), fx=1 / 8, fy=1 / 8), p_size))
+        template_names.append(filename[4:].split(".")[0])
 
 searchable_images = []  # reads in and grayscales all images
 colour_images = []
@@ -128,22 +136,37 @@ for im_filename in os.listdir(images_directory):
         # Adds the laplacian pyramids for each image
         lap_pyramids.append(build_pyramids(readImage, p_size))
 
+image_contains = []
+for txt_filename in os.listdir(image_label_directory):
+    text_filepath = os.path.join(image_label_directory, txt_filename)
+    if os.path.isfile(text_filepath):
+        holder = set()
+        with open(text_filepath, "r") as t:
+            for line in t:
+                temp_text = line.split(", ")[0]
+                holder.add(temp_text)
+        image_contains.append(holder)
+
 jaccard_thresh = 0.3
+found_in_image = []
 for imidx, image in enumerate(lap_pyramids):
     image = cv.cvtColor(image[0], cv.COLOR_BGR2GRAY)
-    for template in lap_templates:
+    holder = set()
+    for template_name, template in zip(template_names, lap_templates):
         # Densely matches all template images with main image using the normalised correlation coefficient
         template = cv.cvtColor(template[0], cv.COLOR_BGR2GRAY)
         h, w = template.shape
         result = cv.matchTemplate(image, template, cv.TM_CCOEFF_NORMED)
-        cv.imshow("res", result)
-        threshold = 0.9  # Threshold found by testing, 0.87 is optimal for pyramid size of 3 but 0.9 for size of 4
+        # cv.imshow("res", result)
+        threshold = 0.87  # Threshold found by testing, 0.87 is optimal for pyramid size of 3 but 0.9 for size of 4
         loc = np.where(result >= threshold)
         # Gets topleft and botright points for each point above the threshold that has been found
         box_arrays = [[x_pt, y_pt, x_pt + w, y_pt + h, result[y_pt, x_pt]] for x_pt, y_pt in zip(*loc[::-1])]
         # casts it to an np array for parallel processing in our non maximum suppression function
         box_arrays = np.array(box_arrays)
         boxes = get_jaccard(box_arrays, jaccard_thresh)
+        if len(boxes) > 0:
+            holder.add(template_name)
         for box in boxes:
             if len(box) < 4:
                 continue  # Handles unusual conditions in which a bounding box is incorrectly returned
@@ -152,9 +175,71 @@ for imidx, image in enumerate(lap_pyramids):
             # Adds a rectangle in the correct location for each found point
             cv.rectangle(colour_images[imidx], (x_pt * (2 ** p_size), y_pt * (2 ** p_size)),
                          (x2_pt * (2 ** p_size), y2_pt * (2 ** p_size)), (0, 0, 255), 1)
+    found_in_image.append(holder)
 
-
-    cv.imshow('Display image', colour_images[imidx])
-    cv.waitKey(0)
+    # cv.imshow('Display image', colour_images[imidx])
+    # cv.waitKey(0)
 
 cv.destroyAllWindows()
+
+true_positives = 0
+false_positives = 0
+false_negatives = 0
+for found_template, actual_template in zip(found_in_image, image_contains):
+    t_pos = found_template & actual_template
+    true_positives += len(t_pos)
+    f_pos = found_template - actual_template
+    false_positives += len(f_pos)
+    f_neg = actual_template - found_template
+    false_negatives += len(f_neg)
+    # print(found_template, actual_template)
+
+# dat = pd.DataFrame(
+#     np.array([[true_positives, false_positives], [0, false_negatives]]),
+#     columns=["True", "False"],
+#     index=["Positive", "Negative"]
+# )
+#
+# sns.heatmap(
+#     data=dat,
+#     annot=True,
+#     cmap="crest"
+# )
+
+#plt.show()
+# Prec 0 = 1.0
+# Prec 1 = 1.0
+# Prec 2 = 0.9782608695652174
+# Prec 3 = 0.7058823529411765
+# Prec 4 = 0.17063492063492064
+# dat = pd.DataFrame({"No Laplacian": [1], "Lap Pyr 1": [1],
+#                     "Lap Pyr 2": [0.9782608695652174], "Lap Pyr 3": [0.7058823529411765],
+#                     "Lap Pyr 4": [0.17063492063492064]})
+#
+# # Prec at 0.5 thresh, lap 2
+# 0.6 2 : 0.14174454828660435, 1
+# 0.7 2 : 0.2791411042944785, 1
+# 0.8 2 : 0.5759493670886076, 1
+# 0.85 2 : 0.8053097345132744, 1
+# 0.87 2 : 0.8504672897196262, 0.989010989010989
+# 0.9 2 : 0.9782608695652174, 0.8021978021978022
+# 0.93 2 : 1 (however recall not so much)
+
+dat = pd.DataFrame({"Thresholds": [0.6, 0.7, 0.8, 0.85, 0.87, 0.9, 0.93],
+                    "Precision": [
+                        0.14174454828660435,
+                        0.2791411042944785,
+                        0.5759493670886076,
+                        0.8053097345132744,
+                        0.8504672897196262,
+                        0.9782608695652174,
+                        1
+                    ],
+                    "Recall": [1, 1, 1, 1, 1, 0.989010989010989, 0.8021978021978022]})
+
+sns.lineplot(data=dat, x="Thresholds", y="Precision", color="g")
+ax2 = plt.twinx()
+sns.lineplot(data=dat, x="Thresholds", y="Recall", ax=ax2, color="b")
+plt.show()
+print("Precision", true_positives / (true_positives + false_positives))
+print("Recall", true_positives / (true_positives + false_negatives))
