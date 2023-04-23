@@ -1,0 +1,8 @@
+Threshold:250
+nOctaveLayers:5
+edgeThreshold:15
+contrastThreshold:0.05
+True Positives:52
+False Positives:11
+Precision:0.8253968253968254
+Recall:0.6933333333333334
