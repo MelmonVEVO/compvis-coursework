@@ -1,0 +1,95 @@
+Threshold:250
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:52
+
+False Positives:11
+
+Precision:0.8253968253968254
+
+Recall:0.6933333333333334
+
+Threshold:225
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:45
+
+False Positives:7
+
+Precision:0.8653846153846154
+
+Recall:0.569620253164557
+
+Threshold:200
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:40
+
+False Positives:5
+
+Precision:0.8888888888888888
+
+Recall:0.49382716049382713
+
+Threshold:175
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:35
+
+False Positives:3
+
+Precision:0.9210526315789473
+
+Recall:0.42168674698795183
+
+Threshold:150
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:28
+
+False Positives:3
+
+Precision:0.9032258064516129
+
+Recall:0.3373493975903614
+
+Threshold:125
+
+nOctaveLayers:5
+
+edgeThreshold:15
+
+contrastThreshold:0.05
+
+True Positives:24
+
+False Positives:2
+
+Precision:0.9230769230769231
+
+Recall:0.2857142857142857
