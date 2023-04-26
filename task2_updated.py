@@ -131,13 +131,11 @@ for txt_filename in os.listdir(image_label_directory):
 
 found_in_image = []
 for imidx, image in enumerate(gauss_pyramids):
-    # image = cv.cvtColor(image[0], cv.COLOR_BGR2GRAY)
     image = image[0]
     holder = set()
     box_arrays = []
     for template_name, template in zip(template_names, gauss_templates):
         # Densely matches all template images with main image using the normalised correlation coefficient
-        # template = cv.cvtColor(template[0], cv.COLOR_BGR2GRAY)
         template = template[0]
         h, w = template.shape[:2]
         result = cv.matchTemplate(image, template, cv.TM_CCOEFF_NORMED)
